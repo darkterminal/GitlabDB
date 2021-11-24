@@ -1,6 +1,6 @@
 {
     "name": "darkterminal/gitlab-json-db",
-    "description": "A PHP Class that reads JSON file as a database. Use for sample DBs using Gitlab API inspire from jajo/jsondb",
+    "description": "A PHP Class that reads JSON file as a database. Use for sample DBs using Gitlab API inspire from donjajo/jsondb",
     "type": "library",
     "license": "MIT",
     "autoload": {
