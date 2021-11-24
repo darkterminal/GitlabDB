@@ -1,0 +1,6 @@
+/tests_dev/
+/vendor/
+phpunit.dev.xml
+composer.phar
+composer.lock
+/vendor/

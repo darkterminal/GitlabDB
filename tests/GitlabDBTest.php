@@ -1,0 +1,260 @@
+<?php
+
+declare(strict_types=1);
+
+use GitlabDB\GitlabDB;
+use PHPUnit\Framework\TestCase;
+
+class InsertTest extends TestCase
+{
+    private $db;
+
+    public function load_db()
+    {
+        $options['personal_access_token']    = "YOUR_GITLAB_ACCESS_TOKEN";
+        $options['project_id']               = "YOUR_GITLAB_PROJECT_ID";
+        $options['branch']                   = "YOUR_GITLAB_BRANCH";
+        $options['cloud_url']                = "YOUR_GITLAB_URL";
+
+        $this->db = new GitlabDB($options);
+    }
+
+    public function testInsert(): void
+    {
+        $this->load_db();
+        $names = ['James£', 'John£', 'Oji£', 'Okeke', 'Bola', 'Thomas', 'Ibrahim', 'Smile'];
+        $states = ['Abia', 'Lagos', 'Benue', 'Kano', 'Kastina', 'Abuja', 'Imo', 'Ogun'];
+        shuffle($names);
+        shuffle($states);
+
+        $state = current($states);
+        $name = current($names);
+        $age = mt_rand(20, 100);
+        printf("Inserting: \n\nName\tAge\tState\n%s\t%d\t%s", $name, $age, $state);
+
+        $indexes = $this->db->insert('users', [
+            'name' => $name,
+            'state' => $state,
+            'age' => $age
+        ]);
+
+        $this->assertArrayHasKey(0, $indexes);
+
+        $this->db->insert("users", array(
+            "name" => "Dummy",
+            "state" => "Lagos",
+            "age" => 12
+        ));
+    }
+
+    public function testGet(): void
+    {
+        $this->load_db();
+        printf("\nCheck exist\n");
+        $users = ($this->db->select('*')
+            ->from('users')
+            ->get());
+        $this->assertNotEmpty($users);
+    }
+
+    public function testWhere(): void
+    {
+        $this->load_db();
+        $result = ($this->db->select('*')
+            ->from('users')
+            ->where(['name' => 'Okeke'])
+            ->get());
+
+        // Probably has not inserted. Lets do it then
+        if (!$result) {
+            $this->db->insert('users', [
+                'name' => 'Okeke',
+                'age' => 21,
+                'state' => 'Enugu'
+            ]);
+
+            $result = ($this->db->select('*')
+                ->from('users')
+                ->where(['name' => 'Okeke'])
+                ->get());
+        }
+
+        $this->assertEquals('Okeke', $result[0]['name']);
+    }
+
+    public function testMultiWhere(): void
+    {
+        $this->load_db();
+
+        $this->db->insert("users", array(
+            "name" => "Jajo",
+            "age" => null,
+            "state" => "Lagos"
+        ));
+
+        $this->db->insert("users", array(
+            "name" => "Johnny",
+            "age" => 30,
+            "state" => "Ogun"
+        ));
+
+        $result = $this->db->select("*")->from("users")->where(array("age" => null, "name" => "Jajo"))->get();
+        $this->assertEquals('Jajo', $result[0]['name']);
+    }
+
+    public function testAND(): void
+    {
+        $this->load_db();
+
+        $this->db->insert("users", array(
+            "name" => "Jajo",
+            "age" => 50,
+            "state" => "Lagos"
+        ));
+
+        $this->db->insert("users", array(
+            "name" => "Johnny",
+            "age" => 50,
+            "state" => "Ogun"
+        ));
+
+        $result = $this->db->select("*")->from("users")->where(array("age" => 50, "name" => "Jajo"), GitlabDB::AND)->get();
+
+        $this->assertEquals(1, count($result));
+        $this->assertEquals("Jajo", $result[0]['name']);
+    }
+
+    public function testRegexAND(): void
+    {
+        $this->load_db();
+
+        $this->db->insert("users", array(
+            "name" => "Paulo",
+            "age" => 50,
+            "state" => "Algeria"
+        ));
+
+        $this->db->insert("users", array(
+            "name" => "Nina",
+            "age" => 50,
+            "state" => "Nigeria"
+        ));
+
+        $this->db->insert("users", array(
+            "name" => "Ogwo",
+            "age" => 49,
+            "state" => "Nigeria"
+        ));
+
+        $result = ($this->db->select("*")
+            ->from("users")
+            ->where(array(
+                "state" => GitlabDB::regex("/ria/"),
+                "age" => GitlabDB::regex("/5[0-9]/")
+            ), GitlabDB::AND)
+            ->get());
+
+        $this->assertEquals(2, count($result));
+        $this->assertEquals("Paulo", $result[0]["name"]);
+        $this->assertEquals("Nina", $result[1]["name"]);
+    }
+
+    public function testRegex(): void
+    {
+        $this->load_db();
+
+        $this->db->insert("users", array(
+            "name" => "Jajo",
+            "age" => 89,
+            "state" => "Abia"
+        ));
+
+        $this->db->insert("users", array(
+            "name" => "Mitchell",
+            "age" => 45,
+            "state" => "Zamfara"
+        ));
+
+        $result = ($this->db->select("*")
+            ->from("users")
+            ->where(array("state" => GitlabDB::regex("/Zam/")))
+            ->get());
+
+        $this->assertEquals('Mitchell', $result[0]['name']);
+    }
+
+    public function testUpdate(): void
+    {
+        $this->load_db();
+
+        $this->db->update(['name' => 'Jammy', 'state' => 'Sokoto'])
+            ->from('users')
+            ->where(['name' => 'Okeke'])
+            ->trigger();
+
+        $this->db->update(["state" => "Rivers"])
+            ->from("users")
+            ->where(["name" => "Dummy"])
+            ->trigger();
+
+        $result = $this->db->select('*')
+            ->from('users')
+            ->where(['name' => 'Jammy'])
+            ->get();
+
+        $this->assertTrue($result[0]['state'] == 'Sokoto' && $result[0]['name'] == 'Jammy');
+    }
+
+    public function testSQLExport(): void
+    {
+        $this->load_db();
+
+        $this->db->to_mysql("users", "tests/users.sql");
+
+        $this->assertTrue(file_exists("tests/users.sql"));
+    }
+
+    public function testDelete(): void
+    {
+        $this->load_db();
+
+        $this->db->delete()
+            ->from('users')
+            ->where(['name' => 'Jammy'])
+            ->trigger();
+
+        $result = $this->db->select('*')
+            ->from('users')
+            ->where(['name' => 'Jammy'])
+            ->get();
+
+        $this->assertEmpty($result);
+    }
+
+    public function testDeleteAll(): void
+    {
+        $this->load_db();
+
+        /* I add a select action with where statement */
+        $result_before = $this->db->select('*')
+            ->from('users')
+            ->where(['state' => 'Rivers'])
+            ->get();
+
+        /* Select action works fine */
+        printf("\nCount of select action's result : %d", count($result_before));
+        $this->assertTrue($result_before[0]['name'] == 'Dummy');
+
+        /* Original test code by donjajo */
+        $this->db->delete()
+            ->from('users')
+            ->trigger();
+
+        $result = $this->db->select('*')
+            ->from('users')
+            ->get();
+
+        /* But delete all action not working and assertion fail*/
+        $this->assertEmpty($result);
+    }
+}
